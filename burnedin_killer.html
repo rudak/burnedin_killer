@@ -1,136 +1,448 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
-    <head>
-        <title>Burnedin Killer</title>
-    </head>
-    <body id="burn" style="width:100%; height:100%; background-color:#fff;">
-        <div id="controls">
-            <div>
-                <label>Timer (ms) : </label>
-                <input type="text" value="250" id="timer" />
-            </div>
-            <div>
-                <label>Run for : </label>
-                <input type="text" value="1" id="run_for" />
-                <select id="for_unit">
-                    <option value="second">second(s)</option>
-                    <option value="minute">minute(s)</option>
-                    <option value="hour">hour(s)</option>
-                </select>
-            </div>
-            <div>
-                <input type="button" value="Run !" onclick="burned_in_killer.launch();" />
-            </div>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Burnedin Killer — modernisé</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --panel-bg: rgba(255,255,255,0.92);
+      --accent: #1f6feb;
+      --muted:#666;
+      --radius:10px;
+    }
+    html,body{
+      height:100%;
+      margin:0;
+      font-family: Inter, Roboto, -apple-system, "Segoe UI", "Helvetica Neue", Arial;
+      background: var(--bg);
+      color: #111;
+    }
+    .app {
+      min-height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      position:relative;
+      overflow:hidden;
+    }
+
+    /* background (the "burn" surface) */
+    #burn {
+      position:absolute;
+      inset:0;
+      background:var(--bg);
+      transition: background-color .08s linear; /* smooth-ish between flashes */
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    /* control panel */
+    .panel {
+      position:relative;
+      z-index:10;
+      width:min(680px, calc(100% - 32px));
+      max-width:95%;
+      background:var(--panel-bg);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+      border-radius:var(--radius);
+      padding:18px;
+      display:grid;
+      gap:12px;
+      grid-template-columns: 1fr;
+    }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    label { font-size:0.95rem; color:var(--muted); min-width:110px; }
+    input[type="number"], select, input[type="text"]{
+      padding:8px 10px;
+      border-radius:8px;
+      border:1px solid #ddd;
+      min-width:120px;
+      font-size:0.95rem;
+    }
+    .controls-right { margin-left:auto; display:flex; gap:8px; }
+
+    .buttons { display:flex; gap:8px; align-items:center; }
+    button {
+      background:var(--accent);
+      color:#fff;
+      border:0;
+      padding:10px 14px;
+      border-radius:8px;
+      font-weight:600;
+      cursor:pointer;
+      box-shadow: 0 6px 14px rgba(31,111,235,0.12);
+    }
+    button.secondary {
+      background:#f1f4f8;
+      color:#111;
+      box-shadow:none;
+    }
+    button.ghost {
+      background:transparent;
+      color:var(--muted);
+      border:1px solid #e6e9ee;
+    }
+
+    .meta {
+      display:flex;
+      gap:12px;
+      align-items:center;
+      justify-content:space-between;
+      font-size:0.9rem;
+      color:var(--muted);
+      margin-top:6px;
+    }
+
+    .progress {
+      height:8px;
+      background:#eee;
+      border-radius:8px;
+      overflow:hidden;
+      flex:1;
+      margin-left:12px;
+    }
+    .progress > i {
+      display:block;
+      height:100%;
+      background: linear-gradient(90deg,#1f6feb,#7c3aed);
+      width:0%;
+      transition: width .1s linear;
+    }
+
+    .palette {
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
+      margin-top:6px;
+    }
+    .chip {
+      width:36px;
+      height:28px;
+      border-radius:6px;
+      border:1px solid rgba(0,0,0,0.06);
+      box-shadow:inset 0 -6px 18px rgba(0,0,0,0.04);
+    }
+
+    .small { font-size:0.85rem; color:var(--muted); }
+    footer { position:relative; z-index:10; text-align:center; margin-top:6px; font-size:0.85rem; color:var(--muted); }
+
+    @media (min-width:760px){
+      .panel { grid-template-columns: 1fr 320px; align-items:center; gap:18px; }
+      .panel .left { display:flex; flex-direction:column; gap:8px; }
+      .panel .right { display:flex; flex-direction:column; gap:8px; justify-content:center; }
+    }
+
+    /* When running we hide the entire panel to expose full screen */
+    .hidden { display:none !important; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div id="burn" aria-live="polite" aria-atomic="true"></div>
+
+    <div class="panel" role="region" aria-label="Contrôles Burnedin Killer">
+      <div class="left">
+        <div class="row">
+          <label for="timer">Timer (ms)</label>
+          <input id="timer" type="number" min="10" step="10" value="250" />
+          <div class="controls-right">
+            <label class="small" for="fullscreen_toggle">Plein écran</label>
+            <input id="fullscreen_toggle" type="checkbox" title="Activer le plein écran"/>
+          </div>
         </div>
-        <script type="text/javascript">
-            var burned_in_killer =
-                    {
-                        options: {
-                            duration: null,
-                            colors: ['red', 'blue', 'yellow', 'green', 'white', 'grey', 'purple'],
-                            color_index: null,
-                            time_unit: null,
-                            total_time: 1,
-                            rounds: 0,
-                            runned: 0,
-                            bodyburn_default_style: 'height:100%, width:100%; background-color:',
-                            fullscreen_enabled: false,
-                            killer_started: false,
-                            initialized: false
-                        },
-                        elements: {
-                            bodyburn: null,
-                            controls: null,
-                            input_timer: null,
-                            input_runfor: null,
-                            input_unit: null
-                        },
-                        initialize: function() {
-                            this.options.runned = 0;
-                            if (true === this.options.initialized) {
-                                return;
-                            }
-                            this.elements.bodyburn = document.getElementById('burn');
-                            this.elements.controls = document.getElementById('controls');
-                            this.elements.input_timer = document.getElementById('timer');
-                            this.elements.input_runfor = document.getElementById('run_for');
-                            this.elements.input_unit = document.getElementById('for_unit');
-                            this.options.initialized = true;
-                        },
-                        config: function() {
-                            this.options.duration = this.elements.input_timer.value;
 
-                            switch (this.elements.input_unit.value) {
-                                case 'second' :
-                                    break;
-                                case 'minute' :
-                                    this.options.total_time *= 60;
-                                    break;
-                                case 'hour' :
-                                    this.options.total_time *= (60 * 60);
-                                    break;
-                            }
+        <div class="row">
+          <label for="run_for">Durée</label>
+          <input id="run_for" type="number" min="0.1" step="0.1" value="1" />
+          <select id="for_unit" aria-label="Unité de durée">
+            <option value="second">seconde(s)</option>
+            <option value="minute">minute(s)</option>
+            <option value="hour">heure(s)</option>
+          </select>
+          <div class="controls-right small" id="status" aria-live="polite">Prêt</div>
+        </div>
 
-                            this.options.rounds = (parseFloat(this.elements.input_runfor.value) * (this.options.total_time * 1000)) / this.options.duration;
-                            this.fullscreen(true);
-                            this.options.killer_started = true;
-                        },
-                        run: function() {
-                            this.elements.bodyburn.setAttribute('style', this.options.bodyburn_default_style + this.getNextColor());
-                            
-                            if (++this.options.runned < this.options.rounds) {
-                                setTimeout('burned_in_killer.run()', this.options.duration);
-                            } else {
-                                this.fullscreen(false);
-                                this.elements.bodyburn.setAttribute('style', this.options.bodyburn_default_style + 'white');
-                                this.elements.controls.style = "display:block;";
-                                this.options.killer_started = false;
-                            }
-                        },
-                        launch: function() {
-                            this.initialize();
-                            this.config();
-                            this.elements.controls.style = "display:none;";
-                            this.run();
-                        },
-                        getNextColor: function() {
-                            if (++this.options.color_index == this.options.colors.length) {
-                                this.options.color_index = 0;
-                            }
-                            return this.options.colors[this.options.color_index];
-                        },
-                        fullscreen: function(state) {
-                            if(false === this.options.fullscreen_enabled){
-                                return;
-                            }
-                            switch (state) {
-                                case true:
-                                    if (document.documentElement.requestFullScreen) {
-                                        document.documentElement.requestFullScreen();
-                                    }
-                                    else if (document.documentElement.mozRequestFullScreen) {
-                                        document.documentElement.mozRequestFullScreen();
-                                    }
-                                    else if (document.documentElement.webkitRequestFullScreen) {
-                                        document.documentElement.webkitRequestFullScreen(Element.ALLOW_KEYBOARD_INPUT);
-                                    }
-                                    break;
-                                case false:
-                                    if (document.cancelFullScreen) {
-                                        document.cancelFullScreen();
-                                    }
-                                    else if (document.mozCancelFullScreen) {
-                                        document.mozCancelFullScreen();
-                                    }
-                                    else if (document.webkitCancelFullScreen) {
-                                        document.webkitCancelFullScreen();
-                                    }
-                                    break;
-                            }
-                        }
-                    }
+        <!-- Palette FIXE : plus d'édition ni de clic changeant les couleurs -->
+        <div class="row" aria-hidden="false">
+          <label>Palette (fixe)</label>
+          <div class="palette" id="palettePreview" aria-hidden="false"></div>
+        </div>
 
-        </script>    
-    </body>
+        <div class="row">
+          <div class="buttons">
+            <button id="start">Run !</button>
+            <button id="pause" class="secondary" disabled>Pause</button>
+            <button id="stop" class="ghost" disabled>Stop</button>
+          </div>
+          <div class="progress" aria-hidden="true" title="Progression d'exécution">
+            <i id="progressbar"></i>
+          </div>
+        </div>
 
+        <div class="meta">
+          <div class="small">Cycles estimés: <span id="rounds">0</span></div>
+          <div class="small">Runnés: <span id="runned">0</span></div>
+          <div class="small">Temps restant: <span id="remaining">0s</span></div>
+        </div>
+      </div>
+
+      <div class="right" aria-hidden="false">
+        <div style="padding:8px;border-radius:8px;background:linear-gradient(180deg,#fff,#f7fbff);box-shadow:inset 0 -12px 24px rgba(0,0,0,0.03)">
+          <h3 style="margin:0 0 6px 0">A propos</h3>
+          <p style="margin:0;color:var(--muted);font-size:0.95rem">
+            Version modernisée — panneau caché pendant l'exécution pour permettre la réparation d'un écran burn-in.
+            Appuyez sur Échap (Escape) pour arrêter et restaurer les contrôles.
+          </p>
+        </div>
+      </div>
+      <footer>Burnedin Killer — use responsibly</footer>
+    </div>
+  </div>
+
+  <script>
+    class BurnedinKiller {
+      constructor(rootId = 'burn') {
+        this.root = document.getElementById(rootId);
+        // elements
+        this.panel = document.querySelector('.panel');
+        this.timerEl = document.getElementById('timer');
+        this.runForEl = document.getElementById('run_for');
+        this.unitEl = document.getElementById('for_unit');
+        this.startBtn = document.getElementById('start');
+        this.pauseBtn = document.getElementById('pause');
+        this.stopBtn = document.getElementById('stop');
+        this.fullscreenToggle = document.getElementById('fullscreen_toggle');
+        this.statusEl = document.getElementById('status');
+        this.roundsEl = document.getElementById('rounds');
+        this.runnedEl = document.getElementById('runned');
+        this.remainingEl = document.getElementById('remaining');
+        this.progressBar = document.getElementById('progressbar');
+        this.palettePreview = document.getElementById('palettePreview');
+
+        // STATE: palette FIXE (on ne permet plus de la modifier via UI)
+        this.colors = ['#808080', '#ffffff', '#000000', '#ff0000', '#00ff00', '#0000ff', '#ffff00']; // exemple : gris, blanc, noir, rouge, vert, bleu, jaune
+        this.colorIndex = 0;
+        this.durationMs = 250;
+        this.totalMs = 1000;
+        this.rounds = 0;
+        this.runned = 0;
+        this._timerId = null;
+        this._running = false;
+        this._paused = false;
+        this._startedAt = null;
+        this._accumulated = 0; // ms executed before pause
+
+        this._bind();
+        this._renderPalette();
+        this._updateStatus('Prêt');
+      }
+
+      _bind(){
+        this.startBtn.addEventListener('click', ()=> this.start());
+        this.pauseBtn.addEventListener('click', ()=> this.togglePause());
+        this.stopBtn.addEventListener('click', ()=> this.stop());
+        // IMPORTANT: palette fixed -> pas d'écoute de clics modifiant la palette
+        // Raccourci clavier: échapp pour arrêter et restaurer le panneau
+        document.addEventListener('keydown', (e)=>{
+          if(e.key === 'Escape'){
+            // stop and show controls
+            if(this._running) this.stop();
+            // ensure panel visible
+            this.panel.classList.remove('hidden');
+          } else if(e.key === 'p' || e.key === 'P'){
+            // pause/resume quick key
+            if(this._running) this.togglePause();
+          }
+        });
+        // Masquer le panneau de contrôle après un petit délai lorsque l'utilisateur clique sur "Run"
+        // (géré dans start())
+      }
+
+      _renderPalette(){
+        // affiche la palette (visuelle uniquement)
+        this.palettePreview.innerHTML = '';
+        this.colors.forEach(c=>{
+          const el = document.createElement('div');
+          el.className = 'chip';
+          el.title = c;
+          el.style.background = c;
+          this.palettePreview.appendChild(el);
+        });
+      }
+
+      _updateStatus(msg){
+        this.statusEl.textContent = msg;
+      }
+
+      _calcRounds(){
+        this.durationMs = Math.max(10, Number(this.timerEl.value) || 250);
+        const runFor = Math.max(0.01, Number(this.runForEl.value) || 1);
+        const unit = this.unitEl.value;
+        let multiplier = 1;
+        if(unit === 'minute') multiplier = 60;
+        if(unit === 'hour') multiplier = 3600;
+        this.totalMs = runFor * multiplier * 1000;
+        this.rounds = Math.max(1, Math.ceil(this.totalMs / this.durationMs));
+        this.roundsEl.textContent = this.rounds;
+      }
+
+      async _enterFullscreenIfNeeded(){
+        if(!this.fullscreenToggle.checked) return;
+        const el = document.documentElement;
+        if (el.requestFullscreen) {
+          try { await el.requestFullscreen(); } catch(e){}
+        } else if (el.webkitRequestFullscreen) {
+          try { el.webkitRequestFullscreen(); } catch(e){}
+        }
+      }
+
+      async _exitFullscreenIfNeeded(){
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+          if (document.exitFullscreen) {
+            try { await document.exitFullscreen(); } catch(e){}
+          } else if (document.webkitExitFullscreen) {
+            try { document.webkitExitFullscreen(); } catch(e){}
+          }
+        }
+      }
+
+      start(){
+        if(this._running) return;
+        this._calcRounds();
+        this.runned = 0;
+        this._accumulated = 0;
+        this._startedAt = performance.now();
+        this._running = true;
+        this._paused = false;
+        this.colorIndex = -1;
+        this._updateControls();
+        this._enterFullscreenIfNeeded();
+        this._updateStatus('En cours');
+
+        // cacher le panneau entièrement pour dégager l'écran
+        // on attend un tout petit délai pour laisser le repaint et éviter un artefact
+        setTimeout(()=> this.panel.classList.add('hidden'), 120);
+
+        this._tick(); // start first tick immediately
+      }
+
+      stop(){
+        this._clearTimer();
+        this._running = false;
+        this._paused = false;
+        this.runned = 0;
+        this._accumulated = 0;
+        this._startedAt = null;
+        this._updateControls();
+        this._updateStatus('Arrêté');
+        this._setBackground('white');
+        this.progressBar.style.width = '0%';
+        this.runnedEl.textContent = '0';
+        this.remainingEl.textContent = '0s';
+        // restaurer panneau de contrôle visible
+        this.panel.classList.remove('hidden');
+        this._exitFullscreenIfNeeded();
+      }
+
+      togglePause(){
+        if(!this._running) return;
+        if(this._paused){
+          // resume
+          this._paused = false;
+          this._startedAt = performance.now();
+          this._updateStatus('En cours');
+          this._updateControls();
+          this._tick();
+        } else {
+          // pause
+          this._paused = true;
+          this._clearTimer();
+          this._accumulated += performance.now() - (this._startedAt || performance.now());
+          this._updateStatus('En pause');
+          this._updateControls();
+          // when paused we reveal the controls so the user can stop safely if needed
+          this.panel.classList.remove('hidden');
+        }
+      }
+
+      _clearTimer(){
+        if(this._timerId !== null){
+          clearTimeout(this._timerId);
+          this._timerId = null;
+        }
+      }
+
+      _updateControls(){
+        this.startBtn.disabled = this._running && !this._paused;
+        this.pauseBtn.disabled = !this._running;
+        this.pauseBtn.textContent = this._paused ? 'Reprendre' : 'Pause';
+        this.stopBtn.disabled = !this._running;
+      }
+
+      _setBackground(color){
+        // use style property for safety
+        this.root.style.backgroundColor = color;
+      }
+
+      _getNextColor(){
+        this.colorIndex = (this.colorIndex + 1) % this.colors.length;
+        return this.colors[this.colorIndex];
+      }
+
+      _tick(){
+        if(!this._running || this._paused) return;
+        // one cycle
+        const color = this._getNextColor();
+        this._setBackground(color);
+        this.runned++;
+        this.runnedEl.textContent = String(this.runned);
+        // schedule next
+        if(this.runned >= this.rounds){
+          // finished
+          this._finish();
+          return;
+        }
+        // schedule next slice
+        this._timerId = setTimeout(()=> this._tick(), this.durationMs);
+        // update progress & remaining
+        this._updateProgress();
+      }
+
+      _updateProgress(){
+        const perc = Math.min(100, (this.runned * this.durationMs) / this.totalMs * 100);
+        this.progressBar.style.width = perc + '%';
+        const remainingMs = Math.max(0, this.totalMs - (this.runned * this.durationMs));
+        this.remainingEl.textContent = (remainingMs >= 1000) ? (Math.round(remainingMs/1000) + 's') : remainingMs + 'ms';
+      }
+
+      _finish(){
+        this._clearTimer();
+        this._running = false;
+        this._paused = false;
+        this._updateStatus('Terminé');
+        this._updateControls();
+        // set to white (neutral)
+        this._setBackground('white');
+        this.progressBar.style.width = '100%';
+        // restore controls so user can re-run or change settings
+        this.panel.classList.remove('hidden');
+        this._exitFullscreenIfNeeded();
+      }
+    }
+
+    // instantiate
+    const killer = new BurnedinKiller();
+
+    // pause automatically if page hidden (and reveal controls)
+    document.addEventListener('visibilitychange', ()=>{
+      if(document.hidden && killer._running && !killer._paused){
+        killer.togglePause();
+      }
+    });
+  </script>
+</body>
 </html>
